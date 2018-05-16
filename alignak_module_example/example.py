@@ -25,7 +25,8 @@ them to a Python logger configured in the module configuration file
 
 import time
 import logging
-import Queue
+from queue import Queue
+from queue import Empty
 import inspect
 
 from alignak.basemodule import BaseModule
@@ -141,20 +142,20 @@ class Example(BaseModule):
         logger.info("Test - Example in %s", inspect.stack()[0][3])
 
         configuration = {
-            u'process_performance_data': True,
-            u'passive_service_checks_enabled': True,
-            u'event_handlers_enabled': True,
-            u'global_host_event_handler': None,
-            u'global_service_event_handler': None,
-            u'interval_length': 60,
-            u'check_external_commands': True,
-            u'passive_host_checks_enabled': True,
-            u'check_host_freshness': True,
-            u'check_service_freshness': True,
-            u'notifications_enabled': True,
-            u'flap_detection_enabled': True,
-            u'active_service_checks_enabled': True,
-            u'active_host_checks_enabled': True
+            'process_performance_data': True,
+            'passive_service_checks_enabled': True,
+            'event_handlers_enabled': True,
+            'global_host_event_handler': None,
+            'global_service_event_handler': None,
+            'interval_length': 60,
+            'check_external_commands': True,
+            'passive_host_checks_enabled': True,
+            'check_host_freshness': True,
+            'check_service_freshness': True,
+            'notifications_enabled': True,
+            'flap_detection_enabled': True,
+            'active_service_checks_enabled': True,
+            'active_host_checks_enabled': True
         }
 
         logger.info("Returning Alignak configuration to the Arbiter: %s", str(configuration))
@@ -389,22 +390,50 @@ class Example(BaseModule):
 
         logger.info("starting...")
 
+        if self.to_q is None:
+            self.to_q = Queue()
+
         while not self.interrupted:
             try:
                 logger.debug("queue length: %s", self.to_q.qsize())
                 start = time.time()
 
                 message = self.to_q.get_nowait()
-                for brok in message:
-                    # Prepare and manage each brok in the queue message
-                    brok.prepare()
-                    self.manage_brok(brok)
+                if message:
+                    for brok in message:
+                        # Prepare and manage each brok in the queue message
+                        brok.prepare()
+                        self.manage_brok(brok)
 
-                logger.debug("time to manage %s broks (%d secs)", len(message), time.time() - start)
-            except Queue.Empty:
+                    logger.debug("time to manage %s broks (%d secs)", len(message),
+                                 time.time() - start)
+            except Empty:
                 # logger.debug("No message in the module queue")
                 time.sleep(0.1)
 
         logger.info("stopping...")
 
         logger.info("stopped")
+
+if __name__ == '__main__':
+    logging.getLogger("alignak.module.example").setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+
+    # Create an Alignak module
+    from alignak.objects.module import Module
+    from alignak.modulesmanager import ModulesManager
+    mod = Module({
+        'module_alias': 'example',
+        'module_types': 'example',
+        'python_name': 'alignak_module_example',
+        # # Alignak backend configuration
+        # 'alignak_backend': 'http://127.0.0.1:5000',
+        # # 'token': '1489219787082-4a226588-9c8b-4e17-8e56-c1b5d31db28e',
+        # 'username': 'admin', 'password': 'admin',
+        # # Set Arbiter address as empty to not poll the Arbiter else the test will fail!
+        # 'alignak_host': '',
+        # 'alignak_port': 7770,
+    })
+
+    mod = Example(mod)
+    mod.main()
